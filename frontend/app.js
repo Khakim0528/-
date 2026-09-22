@@ -234,12 +234,17 @@ const toggleCart = (open) => {
   $("#overlay").classList.toggle("open", open);
 };
 
-async function addToCart(id) {
+async function addToCart(id, btn) {
   if (!state.user) return openAuth();
   await guard(async () => {
     state.cart = await api("/cart/items", { method: "POST", body: { product_id: id, quantity: 1 } });
     renderChrome();
     toast("Добавлено в корзину");
+    if (btn) {
+      btn.classList.remove("added");
+      void btn.offsetWidth; // restart the animation if clicked again quickly
+      btn.classList.add("added");
+    }
   });
 }
 
@@ -319,8 +324,8 @@ const isNewProduct = (p) => Date.now() - new Date(p.created_at).getTime() < 14 *
 function renderGrid() {
   const grid = $("#grid");
   if (!grid) return;
-  grid.innerHTML = state.products.length ? state.products.map((p) => `
-    <article class="card">
+  grid.innerHTML = state.products.length ? state.products.map((p, i) => `
+    <article class="card" style="animation-delay:${Math.min(i * 40, 320)}ms">
       <div class="thumb">
         ${isNewProduct(p) ? '<span class="badge-tag new">Новинка</span>' : p.stock < 1 ? '<span class="badge-tag out">Нет в наличии</span>' : ""}
         <button class="fav-btn${isFavorite(p.id) ? " on" : ""}" data-action="fav" data-id="${p.id}" aria-label="В избранное">${isFavorite(p.id) ? "♥" : "♡"}</button>
@@ -567,7 +572,7 @@ document.addEventListener("click", (e) => {
     case "close-cart": toggleCart(false); break;
     case "close-dialog": el.closest("dialog").close(); break;
     case "account": if (state.user) logout(); else { toggleCart(false); openAuth(); } break;
-    case "add": addToCart(id); break;
+    case "add": addToCart(id, el); break;
     case "qty": setQty(id, Number(el.dataset.q)); break;
     case "checkout": openCheckout(); break;
     case "category": state.filters.category = el.dataset.id ? id : null; renderChips(); loadProducts(true); break;
