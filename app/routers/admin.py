@@ -5,8 +5,8 @@ from sqlalchemy import func, select
 
 from ..deps import DB, AdminUser
 from ..models import Category, Order, OrderItem, OrderStatus, Product, User
-from ..schemas import (CategoryIn, CategoryOut, OrderOut, ProductIn, ProductOut,
-                       ProductUpdate, StatsOut, StatusUpdate)
+from ..schemas import (AdminUserOut, CategoryIn, CategoryOut, OrderOut, ProductIn, ProductOut,
+                       ProductUpdate, StatsOut, StatusUpdate, UserOut)
 from .orders import cancel_order
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -130,6 +130,18 @@ def set_order_status(order_id: int, data: StatusUpdate, _: AdminUser, db: DB):
         order.status = data.status
     db.commit()
     return order
+
+
+# ---- users ----
+@router.get("/users", response_model=list[AdminUserOut])
+def list_users(_: AdminUser, db: DB, skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
+    order_counts = (select(Order.user_id, func.count(Order.id).label("cnt"))
+                    .group_by(Order.user_id).subquery())
+    stmt = (select(User, func.coalesce(order_counts.c.cnt, 0))
+            .outerjoin(order_counts, order_counts.c.user_id == User.id)
+            .order_by(User.id.desc()).offset(skip).limit(limit))
+    return [AdminUserOut(**UserOut.model_validate(user).model_dump(), orders_count=count)
+            for user, count in db.execute(stmt).all()]
 
 
 # ---- stats ----

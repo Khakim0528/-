@@ -32,6 +32,10 @@ class UserOut(ORM):
     created_at: datetime
 
 
+class AdminUserOut(UserOut):
+    orders_count: int = 0
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -325,7 +325,7 @@ async function cancelOrder(id) {
 /* ---------- admin ---------- */
 async function renderAdmin() {
   if (!state.user || state.user.role !== "admin") { location.hash = "#/"; return; }
-  const tabs = [["stats", "Статистика"], ["orders", "Заказы"], ["products", "Товары"]];
+  const tabs = [["stats", "Статистика"], ["orders", "Заказы"], ["products", "Товары"], ["users", "Клиенты"]];
   $("#view").innerHTML = `
     <h1 class="page-title">Админ-панель</h1>
     <div class="toolbar"><div class="chips">${tabs.map(([k, n]) => `<button class="chip${state.adminTab === k ? " active" : ""}" data-action="admin-tab" data-tab="${k}">${n}</button>`).join("")}</div></div>
@@ -357,7 +357,7 @@ async function renderAdmin() {
             ${NEXT[o.status].map((s) => `<option value="${s}">${STATUS[s]}</option>`).join("")}
           </select></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Заказов нет</td></tr>`}
       </table></div>`;
-    } else {
+    } else if (state.adminTab === "products") {
       const products = await api("/admin/products?limit=200");
       state.adminProducts = products;
       body.innerHTML = `
@@ -369,6 +369,18 @@ async function renderAdmin() {
             <td>${p.is_active ? "Виден" : '<span class="muted">Скрыт</span>'}</td>
             <td><button class="btn ghost small" data-action="product-edit" data-id="${p.id}">Изменить</button></td></tr>`).join("")}
         </table></div>`;
+    } else {
+      const users = await api("/admin/users?limit=200");
+      body.innerHTML = `<div class="panel table-wrap"><table>
+        <tr><th>Клиент</th><th>Email</th><th>Телефон</th><th>Регистрация</th><th>Роль</th><th>Заказов</th></tr>
+        ${users.map((u) => `<tr>
+          <td>${esc(u.full_name) || '<span class="muted">—</span>'}</td>
+          <td>${esc(u.email)}</td>
+          <td>${esc(u.phone) || '<span class="muted">—</span>'}</td>
+          <td>${fmtDate(u.created_at)}</td>
+          <td>${u.role === "admin" ? '<span class="status">Админ</span>' : "Клиент"}</td>
+          <td>${u.orders_count}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Пока никто не зарегистрировался</td></tr>`}
+      </table></div>`;
     }
   });
 }

@@ -136,3 +136,17 @@ def test_orders_are_private_and_no_oversell(client):
 def test_admin_stats(client):
     admin = login(client, "admin@test.io", "adminpass1")
     assert client.get("/admin/stats", headers=admin).json()["orders"] == 0
+
+
+def test_admin_users_list_shows_registered_customers(client):
+    admin = login(client, "admin@test.io", "adminpass1")
+    h = customer(client)
+    p = make_product(client, admin, stock=5)
+    client.post("/cart/items", json={"product_id": p["id"], "quantity": 1}, headers=h)
+    client.post("/orders", json={"address": "Main street 1", "phone": "+123456"}, headers=h)
+
+    users = client.get("/admin/users", headers=admin).json()
+    assert client.get("/admin/users", headers=h).status_code == 403  # customers can't see the list
+    by_email = {u["email"]: u for u in users}
+    assert by_email["bob@test.io"]["orders_count"] == 1
+    assert by_email["admin@test.io"]["role"] == "admin"
