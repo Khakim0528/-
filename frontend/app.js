@@ -429,7 +429,11 @@ async function renderAdmin() {
           <td>${u.role === "admin" ? '<span class="status">Админ</span>' : "Клиент"}</td>
           <td>${u.orders_count}</td>
           <td>${u.is_active ? "Активен" : '<span class="status cancelled">Заблокирован</span>'}</td>
-          <td>${u.id === state.user.id ? "" : `<button class="btn ${u.is_active ? "danger" : "ghost"} small" data-action="user-status" data-id="${u.id}" data-active="${!u.is_active}">${u.is_active ? "Заблокировать" : "Разблокировать"}</button>`}</td>
+          <td>${u.id === state.user.id ? "" : `
+            <div class="actions" style="margin:0">
+              <button class="btn ${u.is_active ? "danger" : "ghost"} small" data-action="user-status" data-id="${u.id}" data-active="${!u.is_active}">${u.is_active ? "Заблокировать" : "Разблокировать"}</button>
+              <button class="btn ghost small" data-action="user-delete" data-id="${u.id}">Удалить</button>
+            </div>`}</td>
         </tr>`).join("") || `<tr><td colspan="8" class="muted">Пока никто не зарегистрировался</td></tr>`}
       </table></div>`;
     }
@@ -441,6 +445,15 @@ async function setUserStatus(id, isActive) {
   await guard(async () => {
     await api(`/admin/users/${id}/status`, { method: "PATCH", body: { is_active: isActive } });
     toast(isActive ? "Клиент разблокирован" : "Клиент заблокирован");
+    renderAdmin();
+  });
+}
+
+async function deleteUser(id) {
+  if (!confirm("Удалить клиента навсегда? Это нельзя отменить. (Если у него есть заказы, удаление не пройдёт — тогда используйте блокировку.)")) return;
+  await guard(async () => {
+    await api(`/admin/users/${id}`, { method: "DELETE" });
+    toast("Клиент удалён");
     renderAdmin();
   });
 }
@@ -536,6 +549,7 @@ document.addEventListener("click", (e) => {
     case "product-new": openProductDialog(null); break;
     case "product-edit": openProductDialog(state.adminProducts.find((p) => p.id === id)); break;
     case "user-status": setUserStatus(id, el.dataset.active === "true"); break;
+    case "user-delete": deleteUser(id); break;
   }
 });
 

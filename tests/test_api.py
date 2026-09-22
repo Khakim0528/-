@@ -234,3 +234,33 @@ def test_admin_cannot_block_self(client):
     admin = login(client, "admin@test.io", "adminpass1")
     r = client.patch(f"/admin/users/{admin_id}/status", json={"is_active": False}, headers=admin)
     assert r.status_code == 400
+
+
+def test_admin_can_delete_customer_without_orders(client):
+    admin = login(client, "admin@test.io", "adminpass1")
+    customer(client)
+    bob_id = next(u["id"] for u in client.get("/admin/users", headers=admin).json() if u["email"] == "bob@test.io")
+
+    assert client.delete(f"/admin/users/{bob_id}", headers=admin).status_code == 204
+    remaining = [u["email"] for u in client.get("/admin/users", headers=admin).json()]
+    assert "bob@test.io" not in remaining
+    # the email is free again, since the account is really gone
+    assert client.post("/auth/register", json={"email": "bob@test.io", "password": "password123"}).status_code == 201
+
+
+def test_admin_cannot_delete_customer_with_orders(client):
+    admin = login(client, "admin@test.io", "adminpass1")
+    h = customer(client)
+    p = make_product(client, admin, stock=5)
+    client.post("/cart/items", json={"product_id": p["id"], "quantity": 1}, headers=h)
+    client.post("/orders", json={"address": "Main street 1", "phone": "+123456"}, headers=h)
+    bob_id = next(u["id"] for u in client.get("/admin/users", headers=admin).json() if u["email"] == "bob@test.io")
+
+    r = client.delete(f"/admin/users/{bob_id}", headers=admin)
+    assert r.status_code == 409
+    assert "bob@test.io" in [u["email"] for u in client.get("/admin/users", headers=admin).json()]
+
+
+def test_admin_cannot_delete_self(client):
+    admin = login(client, "admin@test.io", "adminpass1")
+    assert client.delete("/admin/users/1", headers=admin).status_code == 400

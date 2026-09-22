@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
 from ..deps import DB, AdminUser
-from ..models import Category, Order, OrderItem, OrderStatus, Product, User
+from ..models import CartItem, Category, EmailVerification, Order, OrderItem, OrderStatus, Product, User
 from ..schemas import (AdminUserOut, CategoryIn, CategoryOut, OrderOut, ProductIn, ProductOut,
                        ProductUpdate, StatsOut, StatusUpdate, UserStatusUpdate)
 from .orders import cancel_order
@@ -156,6 +156,27 @@ def set_user_status(user_id: int, data: UserStatusUpdate, admin: AdminUser, db: 
     db.commit()
     order_count = db.scalar(select(func.count(Order.id)).where(Order.user_id == user.id)) or 0
     return AdminUserOut.model_validate(user).model_copy(update={"orders_count": order_count})
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, admin: AdminUser, db: DB):
+    """Permanently remove a customer who never placed an order. Once they have
+    order history, deleting them would break those records — block them instead."""
+    if user_id == admin.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot delete your own account")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    if db.scalar(select(Order.id).where(Order.user_id == user.id).limit(1)):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "У клиента есть заказы — удалить нельзя, история заказов сломается. Заблокируйте вместо этого.")
+    for item in db.scalars(select(CartItem).where(CartItem.user_id == user.id)):
+        db.delete(item)
+    record = db.scalar(select(EmailVerification).where(EmailVerification.user_id == user.id))
+    if record:
+        db.delete(record)
+    db.delete(user)
+    db.commit()
 
 
 # ---- stats ----
