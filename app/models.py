@@ -41,7 +41,20 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(32))
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.customer)
     is_active: Mapped[bool] = mapped_column(default=True)
+    email_verified: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class EmailVerification(Base):
+    """A one-time code for confirming a user's email. Overwritten on each resend."""
+
+    __tablename__ = "email_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(8))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(default=0)
 
 
 class Category(Base):

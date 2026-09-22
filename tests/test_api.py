@@ -2,13 +2,13 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
-from app.models import Role, User
+from app.models import EmailVerification, Role, User
 from app.security import hash_password
 
 
@@ -24,9 +24,13 @@ def client():
 
     app.dependency_overrides[get_db] = override
     with Session() as db:
-        db.add(User(email="admin@test.io", password_hash=hash_password("adminpass1"), role=Role.admin))
+        # Created directly (bypasses the email-code flow), like the real ensure_admin() does.
+        db.add(User(email="admin@test.io", password_hash=hash_password("adminpass1"),
+                    role=Role.admin, email_verified=True))
         db.commit()
-    yield TestClient(app)  # no `with`: skips lifespan, so the app's real DB is untouched
+    tc = TestClient(app)  # no `with`: skips lifespan, so the app's real DB is untouched
+    tc.Session = Session
+    yield tc
     app.dependency_overrides.clear()
 
 
@@ -36,10 +40,19 @@ def login(client, email, password):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+def latest_code(client, email):
+    with client.Session() as db:
+        user = db.scalar(select(User).where(User.email == email))
+        record = db.scalar(select(EmailVerification).where(EmailVerification.user_id == user.id))
+        return record.code
+
+
 def customer(client, email="bob@test.io"):
     r = client.post("/auth/register", json={"email": email, "password": "password123"})
     assert r.status_code == 201, r.text
-    return login(client, email, "password123")
+    v = client.post("/auth/verify-email", json={"email": email, "code": latest_code(client, email)})
+    assert v.status_code == 200, v.text
+    return {"Authorization": f"Bearer {v.json()['access_token']}"}
 
 
 def make_product(client, admin, **kw):
@@ -56,6 +69,35 @@ def test_auth_flow_and_duplicates(client):
     assert dup.status_code == 409
     bad = client.post("/auth/login", data={"username": "bob@test.io", "password": "wrong"})
     assert bad.status_code == 401
+
+
+def test_login_blocked_until_email_verified(client):
+    email = "carol@test.io"
+    assert client.post("/auth/register", json={"email": email, "password": "password123"}).status_code == 201
+
+    blocked = client.post("/auth/login", data={"username": email, "password": "password123"})
+    assert blocked.status_code == 403
+
+    wrong_code = client.post("/auth/verify-email", json={"email": email, "code": "000000"})
+    assert wrong_code.status_code == 400
+
+    ok = client.post("/auth/verify-email", json={"email": email, "code": latest_code(client, email)})
+    assert ok.status_code == 200 and "access_token" in ok.json()
+    assert client.post("/auth/login", data={"username": email, "password": "password123"}).status_code == 200
+
+
+def test_resend_code_issues_a_new_one(client):
+    email = "dave@test.io"
+    client.post("/auth/register", json={"email": email, "password": "password123"})
+    old_code = latest_code(client, email)
+
+    assert client.post("/auth/resend-code", json={"email": email}).status_code == 204
+    new_code = latest_code(client, email)
+
+    assert client.post("/auth/verify-email", json={"email": email, "code": old_code}).status_code == 400
+    assert client.post("/auth/verify-email", json={"email": email, "code": new_code}).status_code == 200
+    # Resending for an unknown/already-verified email doesn't leak that info via an error.
+    assert client.post("/auth/resend-code", json={"email": "nobody@test.io"}).status_code == 204
 
 
 def test_admin_only(client):

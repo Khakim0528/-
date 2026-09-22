@@ -119,9 +119,19 @@ function setAuthMode(mode) {
 
 async function login(email, password) {
   const t = await api("/auth/login", { method: "POST", form: { username: email, password } });
-  state.token = t.access_token;
+  await applyToken(t.access_token);
+}
+
+async function applyToken(token) {
+  state.token = token;
   localStorage.setItem("token", state.token);
   await loadUser();
+}
+
+async function finishAuth() {
+  renderChrome();
+  route();
+  toast(`Добро пожаловать, ${state.user.full_name || state.user.email}!`);
 }
 
 $("#authForm").addEventListener("submit", async (e) => {
@@ -132,15 +142,53 @@ $("#authForm").addEventListener("submit", async (e) => {
   try {
     if (f.dataset.mode === "register") {
       await api("/auth/register", { method: "POST", body: { email: f.email.value, password: f.password.value, full_name: f.full_name.value } });
+      $("#authDlg").close();
+      openVerify(f.email.value, `Мы отправили код на ${f.email.value}. Введите его ниже, чтобы подтвердить почту.`);
+      f.reset();
+      return;
     }
     await login(f.email.value, f.password.value);
     $("#authDlg").close();
     f.reset();
-    renderChrome();
-    route();
-    toast(`Добро пожаловать, ${state.user.full_name || state.user.email}!`);
+    await finishAuth();
+  } catch (ex) {
+    if (ex.message === NOT_VERIFIED_MESSAGE) {
+      $("#authDlg").close();
+      openVerify(f.email.value, ex.message);
+    } else {
+      err.textContent = ex.message;
+    }
+  }
+});
+
+/* ---------- email verification ---------- */
+const NOT_VERIFIED_MESSAGE = "Email не подтверждён. Введите код, отправленный на почту.";
+let pendingEmail = null;
+
+function openVerify(email, hint) {
+  pendingEmail = email.toLowerCase();
+  $("#verifyHint").textContent = hint;
+  $("#verifyError").textContent = "";
+  $("#verifyForm").reset();
+  $("#verifyDlg").showModal();
+}
+
+$("#verifyForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("#verifyError");
+  err.textContent = "";
+  try {
+    const t = await api("/auth/verify-email", { method: "POST", body: { email: pendingEmail, code: e.target.code.value.trim() } });
+    await applyToken(t.access_token);
+    $("#verifyDlg").close();
+    await finishAuth();
   } catch (ex) { err.textContent = ex.message; }
 });
+
+$("#resendBtn").addEventListener("click", () => guard(async () => {
+  await api("/auth/resend-code", { method: "POST", body: { email: pendingEmail } });
+  toast("Код отправлен ещё раз");
+}));
 
 /* ---------- chrome (header, cart) ---------- */
 function renderChrome() {

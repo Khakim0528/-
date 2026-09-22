@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from .config import settings
-from .database import Base, SessionLocal, engine
+from .database import Base, SessionLocal, engine, run_light_migrations
 from .models import Role, User
 from .routers import admin, auth, cart, catalog, orders
 from .security import hash_password
@@ -19,14 +19,16 @@ def ensure_admin():
     with SessionLocal() as db:
         email = settings.admin_email.lower()
         if not db.scalar(select(User).where(User.email == email)):
+            # Created directly, so it skips the email-code flow new signups go through.
             db.add(User(email=email, password_hash=hash_password(settings.admin_password),
-                        full_name="Administrator", role=Role.admin))
+                        full_name="Administrator", role=Role.admin, email_verified=True))
             db.commit()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)  # use Alembic migrations in production
+    run_light_migrations()
     ensure_admin()
     yield
 

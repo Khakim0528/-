@@ -43,6 +43,20 @@
     </form>
   </dialog>
 
+  <dialog id="verifyDlg">
+    <form id="verifyForm" class="form">
+      <h2>Подтвердите email</h2>
+      <p class="muted" id="verifyHint"></p>
+      <label>Код из письма<input name="code" required minlength="6" maxlength="6" inputmode="numeric" autocomplete="one-time-code"></label>
+      <p class="error" id="verifyError"></p>
+      <div class="row">
+        <button type="button" class="btn ghost" data-action="close-dialog">Отмена</button>
+        <button type="button" class="btn ghost" id="resendBtn">Ещё раз</button>
+        <button class="btn primary">Подтвердить</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="checkoutDlg">
     <form id="checkoutForm" class="form">
       <h2>Оформление заказа</h2>

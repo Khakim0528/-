@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import settings
@@ -40,3 +40,24 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+def run_light_migrations() -> None:
+    """`Base.metadata.create_all()` only creates brand-new tables — it won't add a
+    column to a `users` table that already has rows from before that column existed
+    (e.g. on Render/Neon after this update shipped). Add it by hand if missing.
+
+    New signups get `email_verified=False` explicitly from the ORM regardless of this
+    column default (registration always sets it). The default here only backfills
+    *existing* rows, so accounts created before this feature shipped — including the
+    admin account — aren't retroactively locked out; only genuinely new registrations
+    go through the code flow."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {c["name"] for c in inspector.get_columns("users")}
+    if "email_verified" in columns:
+        return
+    default = "1" if is_sqlite else "TRUE"
+    with engine.begin() as conn:
+        conn.execute(text(f"ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT {default}"))

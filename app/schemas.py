@@ -46,6 +46,15 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class VerifyEmailIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
+class ResendCodeIn(BaseModel):
+    email: EmailStr
+
+
 # ---- catalog ----
 class CategoryIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)

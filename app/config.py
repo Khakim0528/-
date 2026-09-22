@@ -12,5 +12,14 @@ class Settings(BaseSettings):
     admin_email: str | None = None
     admin_password: str | None = None
 
+    # Email verification codes on registration. If smtp_host is left empty,
+    # codes are printed to the server log instead of emailed (handy for local dev).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    app_name: str = "Свежо"
+
 
 settings = Settings()
