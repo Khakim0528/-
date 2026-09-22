@@ -10,12 +10,15 @@
   <header class="topbar">
     <div class="wrap bar">
       <a class="logo" href="#/">🥬 Свежо</a>
-      <input id="search" class="search" type="search" placeholder="Поиск продуктов…" aria-label="Поиск">
+      <form id="searchForm" class="search-wrap">
+        <input id="search" class="search" type="search" placeholder="Поиск продуктов…" aria-label="Поиск">
+        <button type="submit" class="search-btn">Найти</button>
+      </form>
       <nav class="nav">
-        <a href="#/orders" data-nav="orders" hidden>Заказы</a>
-        <a href="#/admin" data-nav="admin" hidden>Админ</a>
-        <button class="btn ghost" data-action="open-cart" aria-label="Корзина">🛒 <span id="cartCount" class="badge">0</span></button>
-        <button class="btn ghost" id="accountBtn" data-action="account">Войти</button>
+        <a class="navicon" href="#/orders" data-nav="orders" hidden><span class="navicon-ic">📦</span>Заказы</a>
+        <a class="navicon" href="#/admin" data-nav="admin" hidden><span class="navicon-ic">⚙️</span>Админ</a>
+        <button class="navicon" data-action="open-cart" aria-label="Корзина"><span class="navicon-ic">🛒<span id="cartCount" class="badge" hidden>0</span></span>Корзина</button>
+        <button class="navicon" id="accountBtn" data-action="account"><span class="navicon-ic">👤</span><span id="accountLabel">Войти</span></button>
       </nav>
     </div>
   </header>

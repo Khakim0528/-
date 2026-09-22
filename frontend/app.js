@@ -192,11 +192,12 @@ $("#resendBtn").addEventListener("click", () => guard(async () => {
 
 /* ---------- chrome (header, cart) ---------- */
 function renderChrome() {
-  $("#accountBtn").textContent = state.user ? `${state.user.full_name || state.user.email.split("@")[0]} · Выйти` : "Войти";
+  $("#accountLabel").textContent = state.user ? `${state.user.full_name || state.user.email.split("@")[0]} · Выйти` : "Войти";
   document.querySelector('[data-nav="orders"]').hidden = !state.user;
   document.querySelector('[data-nav="admin"]').hidden = !(state.user && state.user.role === "admin");
   const count = state.cart.items.reduce((n, i) => n + i.quantity, 0);
   $("#cartCount").textContent = count;
+  $("#cartCount").hidden = count === 0;
   renderCart();
 }
 
@@ -276,7 +277,7 @@ $("#checkoutForm").addEventListener("submit", async (e) => {
 /* ---------- catalog ---------- */
 function renderCatalog() {
   $("#view").innerHTML = `
-    <section class="hero"><h1>Свежие продукты с доставкой</h1><p>Выбирайте, добавляйте в корзину — мы привезём.</p></section>
+    <section class="promo"><h1>Свежие продукты с доставкой</h1><p>Выбирайте, добавляйте в корзину — мы привезём день в день по всему городу.</p></section>
     <div class="toolbar">
       <div class="chips" id="chips"></div>
       <select id="sort" aria-label="Сортировка">
@@ -313,12 +314,18 @@ async function loadProducts(reset) {
   });
 }
 
+const isNewProduct = (p) => Date.now() - new Date(p.created_at).getTime() < 14 * 24 * 60 * 60 * 1000;
+
 function renderGrid() {
   const grid = $("#grid");
   if (!grid) return;
   grid.innerHTML = state.products.length ? state.products.map((p) => `
     <article class="card">
-      <div class="thumb">${thumb(p)}</div>
+      <div class="thumb">
+        ${isNewProduct(p) ? '<span class="badge-tag new">Новинка</span>' : p.stock < 1 ? '<span class="badge-tag out">Нет в наличии</span>' : ""}
+        <button class="fav-btn${isFavorite(p.id) ? " on" : ""}" data-action="fav" data-id="${p.id}" aria-label="В избранное">${isFavorite(p.id) ? "♥" : "♡"}</button>
+        ${thumb(p)}
+      </div>
       <div class="card-body">
         <h3>${esc(p.name)}</h3>
         <span class="muted">${esc(p.description) || (p.stock > 0 ? `В наличии: ${p.stock}` : "")}</span>
@@ -328,6 +335,20 @@ function renderGrid() {
     </article>`).join("") : `<div class="empty" style="grid-column:1/-1">Ничего не найдено</div>`;
   $("#more").innerHTML = state.products.length < state.total
     ? `<button class="btn ghost" data-action="more">Показать ещё</button>` : "";
+}
+
+/* ---------- favorites (local, per-browser) ---------- */
+function loadFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem("favorites") || "[]")); }
+  catch { return new Set(); }
+}
+const favorites = loadFavorites();
+const isFavorite = (id) => favorites.has(id);
+
+function toggleFavorite(id) {
+  favorites.has(id) ? favorites.delete(id) : favorites.add(id);
+  try { localStorage.setItem("favorites", JSON.stringify([...favorites])); } catch { /* storage unavailable */ }
+  renderGrid();
 }
 
 /* ---------- orders ---------- */
@@ -505,14 +526,21 @@ function route() {
 }
 window.addEventListener("hashchange", route);
 
+function runSearch() {
+  state.filters.q = $("#search").value.trim();
+  if (location.hash && location.hash !== "#/") location.hash = "#/";
+  else loadProducts(true);
+}
+
 let searchTimer;
-$("#search").addEventListener("input", (e) => {
+$("#search").addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    state.filters.q = e.target.value.trim();
-    if (location.hash && location.hash !== "#/") location.hash = "#/";
-    else loadProducts(true);
-  }, 300);
+  searchTimer = setTimeout(runSearch, 300);
+});
+$("#searchForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  clearTimeout(searchTimer);
+  runSearch();
 });
 
 document.addEventListener("change", (e) => {
@@ -534,6 +562,7 @@ document.addEventListener("click", (e) => {
   if (!el || el.tagName === "SELECT") return;
   const id = Number(el.dataset.id);
   switch (el.dataset.action) {
+    case "fav": toggleFavorite(id); break;
     case "open-cart": toggleCart(true); break;
     case "close-cart": toggleCart(false); break;
     case "close-dialog": el.closest("dialog").close(); break;
