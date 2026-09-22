@@ -18,7 +18,10 @@ def _normalize_url(url: str) -> str:
 database_url = _normalize_url(settings.database_url)
 is_sqlite = database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
-engine = create_engine(database_url, connect_args=connect_args)
+# pool_pre_ping: check a pooled connection is alive before using it, and transparently
+# reconnect if not. Without this, a connection Neon dropped while idle (it does this
+# on its free tier) surfaces as a random OperationalError on the next request.
+engine = create_engine(database_url, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 if is_sqlite:
