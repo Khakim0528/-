@@ -41,11 +41,21 @@ def _issue_verification_code(db: DB, user: User) -> None:
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(data: UserCreate, db: DB):
     email = data.email.lower()
-    if db.scalar(select(User).where(User.email == email)):
+    existing = db.scalar(select(User).where(User.email == email))
+    if existing and existing.email_verified:
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
-    user = User(email=email, password_hash=hash_password(data.password),
-                full_name=data.full_name, phone=data.phone)
-    db.add(user)
+
+    if existing:
+        # An earlier signup never got confirmed (e.g. the code expired or was never
+        # entered) — treat this as a retry: refresh the details and send a new code,
+        # instead of permanently blocking the email on an abandoned attempt.
+        user = existing
+        user.password_hash = hash_password(data.password)
+        user.full_name, user.phone = data.full_name, data.phone
+    else:
+        user = User(email=email, password_hash=hash_password(data.password),
+                    full_name=data.full_name, phone=data.phone)
+        db.add(user)
     db.commit()
     _issue_verification_code(db, user)
     return user

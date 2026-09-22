@@ -71,6 +71,26 @@ def test_auth_flow_and_duplicates(client):
     assert bad.status_code == 401
 
 
+def test_reregistering_unverified_email_retries_instead_of_blocking(client):
+    email = "eve@test.io"
+    assert client.post("/auth/register", json={"email": email, "password": "password123"}).status_code == 201
+    old_code = latest_code(client, email)
+
+    # Retry with a different password before ever confirming — should succeed and
+    # invalidate the first code, not return 409.
+    retry = client.post("/auth/register", json={"email": email, "password": "newpassword456"})
+    assert retry.status_code == 201
+    new_code = latest_code(client, email)
+    assert new_code != old_code
+
+    verified = client.post("/auth/verify-email", json={"email": email, "code": new_code})
+    assert verified.status_code == 200
+    assert client.post("/auth/login", data={"username": email, "password": "newpassword456"}).status_code == 200
+
+    # Now that it's verified, re-registering the same email is a real conflict again.
+    assert client.post("/auth/register", json={"email": email, "password": "password123"}).status_code == 409
+
+
 def test_login_blocked_until_email_verified(client):
     email = "carol@test.io"
     assert client.post("/auth/register", json={"email": email, "password": "password123"}).status_code == 201
