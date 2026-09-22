@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from ..deps import DB, AdminUser
 from ..models import Category, Order, OrderItem, OrderStatus, Product, User
 from ..schemas import (AdminUserOut, CategoryIn, CategoryOut, OrderOut, ProductIn, ProductOut,
-                       ProductUpdate, StatsOut, StatusUpdate, UserOut)
+                       ProductUpdate, StatsOut, StatusUpdate, UserStatusUpdate)
 from .orders import cancel_order
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -140,8 +140,22 @@ def list_users(_: AdminUser, db: DB, skip: int = Query(0, ge=0), limit: int = Qu
     stmt = (select(User, func.coalesce(order_counts.c.cnt, 0))
             .outerjoin(order_counts, order_counts.c.user_id == User.id)
             .order_by(User.id.desc()).offset(skip).limit(limit))
-    return [AdminUserOut(**UserOut.model_validate(user).model_dump(), orders_count=count)
+    return [AdminUserOut.model_validate(user).model_copy(update={"orders_count": count})
             for user, count in db.execute(stmt).all()]
+
+
+@router.patch("/users/{user_id}/status", response_model=AdminUserOut)
+def set_user_status(user_id: int, data: UserStatusUpdate, admin: AdminUser, db: DB):
+    """Block/unblock a customer. Blocked users can't log in; their order history is kept."""
+    if user_id == admin.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot block your own account")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.is_active = data.is_active
+    db.commit()
+    order_count = db.scalar(select(func.count(Order.id)).where(Order.user_id == user.id)) or 0
+    return AdminUserOut.model_validate(user).model_copy(update={"orders_count": order_count})
 
 
 # ---- stats ----

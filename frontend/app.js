@@ -372,16 +372,28 @@ async function renderAdmin() {
     } else {
       const users = await api("/admin/users?limit=200");
       body.innerHTML = `<div class="panel table-wrap"><table>
-        <tr><th>Клиент</th><th>Email</th><th>Телефон</th><th>Регистрация</th><th>Роль</th><th>Заказов</th></tr>
+        <tr><th>Клиент</th><th>Email</th><th>Телефон</th><th>Регистрация</th><th>Роль</th><th>Заказов</th><th>Статус</th><th></th></tr>
         ${users.map((u) => `<tr>
           <td>${esc(u.full_name) || '<span class="muted">—</span>'}</td>
           <td>${esc(u.email)}</td>
           <td>${esc(u.phone) || '<span class="muted">—</span>'}</td>
           <td>${fmtDate(u.created_at)}</td>
           <td>${u.role === "admin" ? '<span class="status">Админ</span>' : "Клиент"}</td>
-          <td>${u.orders_count}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Пока никто не зарегистрировался</td></tr>`}
+          <td>${u.orders_count}</td>
+          <td>${u.is_active ? "Активен" : '<span class="status cancelled">Заблокирован</span>'}</td>
+          <td>${u.id === state.user.id ? "" : `<button class="btn ${u.is_active ? "danger" : "ghost"} small" data-action="user-status" data-id="${u.id}" data-active="${!u.is_active}">${u.is_active ? "Заблокировать" : "Разблокировать"}</button>`}</td>
+        </tr>`).join("") || `<tr><td colspan="8" class="muted">Пока никто не зарегистрировался</td></tr>`}
       </table></div>`;
     }
+  });
+}
+
+async function setUserStatus(id, isActive) {
+  if (!isActive && !confirm("Заблокировать клиента? Он не сможет войти, но история заказов сохранится.")) return;
+  await guard(async () => {
+    await api(`/admin/users/${id}/status`, { method: "PATCH", body: { is_active: isActive } });
+    toast(isActive ? "Клиент разблокирован" : "Клиент заблокирован");
+    renderAdmin();
   });
 }
 
@@ -475,6 +487,7 @@ document.addEventListener("click", (e) => {
     case "admin-tab": state.adminTab = el.dataset.tab; renderAdmin(); break;
     case "product-new": openProductDialog(null); break;
     case "product-edit": openProductDialog(state.adminProducts.find((p) => p.id === id)); break;
+    case "user-status": setUserStatus(id, el.dataset.active === "true"); break;
   }
 });
 

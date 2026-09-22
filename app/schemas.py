@@ -34,6 +34,11 @@ class UserOut(ORM):
 
 class AdminUserOut(UserOut):
     orders_count: int = 0
+    is_active: bool = True
+
+
+class UserStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class Token(BaseModel):

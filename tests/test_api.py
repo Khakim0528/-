@@ -150,3 +150,25 @@ def test_admin_users_list_shows_registered_customers(client):
     by_email = {u["email"]: u for u in users}
     assert by_email["bob@test.io"]["orders_count"] == 1
     assert by_email["admin@test.io"]["role"] == "admin"
+    assert by_email["bob@test.io"]["is_active"] is True
+
+
+def test_admin_can_block_and_unblock_a_customer(client):
+    admin = login(client, "admin@test.io", "adminpass1")
+    customer(client)
+    bob_id = next(u["id"] for u in client.get("/admin/users", headers=admin).json() if u["email"] == "bob@test.io")
+
+    blocked = client.patch(f"/admin/users/{bob_id}/status", json={"is_active": False}, headers=admin)
+    assert blocked.status_code == 200 and blocked.json()["is_active"] is False
+    assert client.post("/auth/login", data={"username": "bob@test.io", "password": "password123"}).status_code == 401
+
+    unblocked = client.patch(f"/admin/users/{bob_id}/status", json={"is_active": True}, headers=admin)
+    assert unblocked.status_code == 200 and unblocked.json()["is_active"] is True
+    assert client.post("/auth/login", data={"username": "bob@test.io", "password": "password123"}).status_code == 200
+
+
+def test_admin_cannot_block_self(client):
+    admin_id = 1  # the fixture creates the admin user first, so id=1
+    admin = login(client, "admin@test.io", "adminpass1")
+    r = client.patch(f"/admin/users/{admin_id}/status", json={"is_active": False}, headers=admin)
+    assert r.status_code == 400
