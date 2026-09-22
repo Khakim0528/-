@@ -30,15 +30,21 @@ def _from_address() -> str:
 def _send_via_brevo(to: str, subject: str, body: str) -> None:
     """HTTP API (port 443) — works even where outbound SMTP ports are blocked,
     e.g. Render's free plan. https://developers.brevo.com/reference/sendtransacemail"""
+    key = (settings.brevo_api_key or "").strip()
     try:
         response = httpx.post(
             "https://api.brevo.com/v3/smtp/email",
-            headers={"api-key": settings.brevo_api_key, "content-type": "application/json"},
+            headers={"api-key": key, "content-type": "application/json"},
             json={"sender": {"email": _from_address()}, "to": [{"email": to}],
                   "subject": subject, "textContent": body},
             timeout=10,
         )
         response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Brevo's response body has the real reason (bad key, unverified sender,
+        # unactivated account, ...) — the status code alone doesn't say which.
+        logger.error("Brevo rejected the email to %s: %s %s — key starts with %r, len=%d, from=%r",
+                     to, exc.response.status_code, exc.response.text, key[:8], len(key), _from_address())
     except httpx.HTTPError:
         logger.exception("Failed to send email to %s via Brevo", to)
         raise
