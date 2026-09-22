@@ -1,3 +1,4 @@
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -5,6 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+
+logger = logging.getLogger("app.auth")
 
 from ..deps import DB, CurrentUser
 from ..mailer import send_verification_code
@@ -35,7 +38,13 @@ def _issue_verification_code(db: DB, user: User) -> None:
     else:
         db.add(EmailVerification(user_id=user.id, code=code, expires_at=expires_at))
     db.commit()
-    send_verification_code(user.email, code)
+    try:
+        send_verification_code(user.email, code)
+    except Exception:
+        # Don't fail registration just because the email didn't go out (bad SMTP/API
+        # config, provider hiccup, ...) — the account exists either way, and the
+        # mailer already logged the real error; the user can hit "resend" later.
+        logger.error("Verification code for %s could not be emailed; it's still in the DB.", user.email)
 
 
 @router.post("/auth/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)

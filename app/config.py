@@ -12,8 +12,12 @@ class Settings(BaseSettings):
     admin_email: str | None = None
     admin_password: str | None = None
 
-    # Email verification codes on registration. If smtp_host is left empty,
-    # codes are printed to the server log instead of emailed (handy for local dev).
+    # Email verification codes on registration. Checked in this order:
+    # 1) Brevo HTTP API (works even on hosts that block outbound SMTP ports, e.g.
+    #    Render's free plan) — set BREVO_API_KEY.
+    # 2) Plain SMTP — set SMTP_HOST (won't work on Render's free plan).
+    # 3) Neither set -> the code is printed to the server log (fine for local dev).
+    brevo_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str | None = None
